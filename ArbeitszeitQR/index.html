@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Arbeitszeit QR</title>
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ZeitQR">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar" id="topbar-title">Arbeitszeit</header>
+
+  <main>
+
+    <!-- HOME (normale Arbeitszeit) -->
+    <section class="view active" id="view-home">
+      <div class="status-card">
+        <div class="status-label"><span class="status-dot" id="status-dot"></span><span>Status</span></div>
+        <div class="status-value" id="status-value">Ausgestempelt</div>
+        <div class="status-sub" id="status-sub">Noch kein Scan</div>
+      </div>
+
+      <button class="scan-btn" id="btn-scan">
+        <span>▣</span> QR-Code scannen
+      </button>
+
+      <div class="section-title">Heute</div>
+      <div class="entry-list" id="today-list">
+        <div class="empty-hint">Noch keine Einträge heute</div>
+      </div>
+    </section>
+
+    <!-- MONTAGE (beim Kunden) -->
+    <section class="view" id="view-montage">
+      <div class="status-card">
+        <div class="status-label"><span class="status-dot" id="status-dot-montage"></span><span>Status</span></div>
+        <div class="status-value" id="status-value-montage">Nicht vor Ort</div>
+        <div class="status-sub" id="status-sub-montage">Noch kein Scan</div>
+      </div>
+
+      <button class="scan-btn" id="btn-scan-montage">
+        <span>▣</span> QR-Code scannen
+      </button>
+
+      <div class="section-title">Heute</div>
+      <div class="entry-list" id="today-list-montage">
+        <div class="empty-hint">Noch keine Einträge heute</div>
+      </div>
+    </section>
+
+    <!-- MONTH -->
+    <section class="view" id="view-month">
+      <div class="segmented" id="month-category-switch">
+        <button class="segmented-btn active" data-category="normal">Arbeitszeit</button>
+        <button class="segmented-btn" data-category="montage">Montage</button>
+      </div>
+
+      <div class="month-nav">
+        <button id="month-prev">‹</button>
+        <div class="month-label" id="month-label">Juli 2026</div>
+        <button id="month-next">›</button>
+      </div>
+      <div class="month-total-card">
+        <span class="label">Gesamt im Monat</span>
+        <span class="value" id="month-total">0,0 h</span>
+      </div>
+      <div class="section-title">Wochen</div>
+      <div id="month-list">
+        <div class="empty-hint">Keine Einträge in diesem Monat</div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="view-settings">
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Registrierte QR-Codes</div>
+          <div class="row-desc" id="registered-code-desc">Noch keine Codes registriert. Der erste gescannte Code wird automatisch registriert.</div>
+          <button class="btn secondary" id="btn-reset-code">Alle Codes zurücksetzen</button>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Alle Daten löschen</div>
+          <div class="row-desc">Löscht alle erfassten Zeiten (Arbeitszeit und Montage) unwiderruflich. Die registrierten Codes bleiben erhalten.</div>
+          <button class="btn danger" id="btn-clear-data">Einträge löschen</button>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Über diese App</div>
+          <div class="row-desc">Arbeitszeit QR läuft komplett offline. Alle Daten werden ausschließlich lokal auf diesem Gerät gespeichert (localStorage) – es gibt keine Server-Verbindung und keinen Datenversand.</div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab-btn active" data-view="home"><span class="tab-icon">🏠</span>Start</button>
+    <button class="tab-btn" data-view="montage"><span class="tab-icon">🚐</span>Montage</button>
+    <button class="tab-btn" data-view="month"><span class="tab-icon">📅</span>Monat</button>
+    <button class="tab-btn" data-view="settings"><span class="tab-icon">⚙️</span>Einstellungen</button>
+  </nav>
+
+  <!-- Scanner overlay -->
+  <div id="scanner-overlay">
+    <div class="scanner-topbar">
+      <button id="btn-close-scanner">Abbrechen</button>
+    </div>
+    <video id="scanner-video" playsinline muted></video>
+    <div class="scan-frame"></div>
+    <div class="scanner-hint" id="scanner-hint">QR-Code in den Rahmen halten</div>
+  </div>
+
+  <!-- Day editor -->
+  <div class="modal-backdrop" id="day-editor-backdrop">
+    <div class="modal-sheet day-editor-sheet">
+      <div class="day-editor-header">
+        <h3 id="day-editor-title">Tag bearbeiten</h3>
+        <button class="btn secondary small" id="day-editor-close">Fertig</button>
+      </div>
+      <div class="day-editor-list" id="day-editor-list"></div>
+      <div class="day-editor-add" id="day-editor-add"></div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modal-backdrop">
+    <div class="modal-sheet">
+      <h3 id="modal-title">Titel</h3>
+      <p id="modal-text">Text</p>
+      <div class="modal-actions" id="modal-actions"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+</div>
+
+<canvas id="scan-canvas" style="display:none;"></canvas>
+<script src="vendor/jsQR.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
