@@ -704,6 +704,27 @@
     document.getElementById('file-input').click();
   });
 
+  // ---------- Paste-text sheet ----------
+  document.getElementById('btn-paste-text').addEventListener('click', () => {
+    document.getElementById('paste-text-input').value = '';
+    document.getElementById('paste-text-backdrop').classList.add('active');
+  });
+  document.getElementById('paste-text-cancel').addEventListener('click', () => {
+    document.getElementById('paste-text-backdrop').classList.remove('active');
+  });
+  document.getElementById('paste-text-backdrop').addEventListener('click', (e) => {
+    if (e.target.id === 'paste-text-backdrop') document.getElementById('paste-text-backdrop').classList.remove('active');
+  });
+  document.getElementById('paste-text-submit').addEventListener('click', () => {
+    const text = document.getElementById('paste-text-input').value;
+    document.getElementById('paste-text-backdrop').classList.remove('active');
+    const parsed = parseReceiptText(text);
+    openReviewOverlay({
+      initialRows: parsed.length ? parsed : [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }]
+    });
+    if (parsed.length === 0) toast('Keine Artikel erkannt – bitte manuell eintragen');
+  });
+
   document.getElementById('file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';

@@ -24,7 +24,10 @@
     <!-- START -->
     <section class="view active" id="view-start">
       <button class="scan-btn" id="btn-scan-receipt">
-        <span>📷</span> Beleg fotografieren
+        <span>📷</span> Foto oder Screenshot hinzufügen
+      </button>
+      <button class="btn secondary" id="btn-paste-text" style="margin-bottom:10px;">
+        📝 Text einfügen
       </button>
       <button class="btn secondary" id="btn-manual-receipt" style="margin-bottom:20px;">
         ✏️ Ohne Foto manuell erfassen
@@ -123,7 +126,7 @@
     </div>
   </div>
 
-  <input type="file" id="file-input" accept="image/*" capture="environment" hidden>
+  <input type="file" id="file-input" accept="image/*" hidden>
 
   <!-- Review overlay: photo scan + editable item list -->
   <div id="review-overlay">
@@ -147,6 +150,19 @@
       <div id="review-rows"></div>
       <button class="btn secondary" id="btn-review-add-row">+ Position hinzufügen</button>
       <button class="btn secondary" id="btn-review-retake" hidden>🔁 Erneut fotografieren</button>
+    </div>
+  </div>
+
+  <!-- Paste-text sheet -->
+  <div class="modal-backdrop" id="paste-text-backdrop">
+    <div class="modal-sheet">
+      <h3>Text einfügen</h3>
+      <p>Kopiere den Text vom Kassenzettel (z.&nbsp;B. aus einer Notiz oder E-Mail) hier hinein, oder tippe die Artikel einfach selbst ein – eine Zeile pro Artikel, Preis am Zeilenende.</p>
+      <textarea id="paste-text-input" placeholder="Milch 1,19&#10;Butter 2,49&#10;4x Wasser 4,00" rows="7"></textarea>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn secondary" id="paste-text-submit">Übernehmen</button>
+        <button class="btn secondary" id="paste-text-cancel">Abbrechen</button>
+      </div>
     </div>
   </div>
 
