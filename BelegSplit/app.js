@@ -106,7 +106,10 @@
   // ---------- RENDER: Start (receipt list) ----------
   function renderStart() {
     const list = document.getElementById('receipt-list');
-    const sorted = [...receipts].sort((a, b) => b.createdAt - a.createdAt);
+    const sorted = [...receipts].sort((a, b) => {
+      if (!!a.paid !== !!b.paid) return a.paid ? 1 : -1;
+      return b.createdAt - a.createdAt;
+    });
     if (sorted.length === 0) {
       list.innerHTML = '<div class="empty-hint">Noch keine Belege erfasst</div>';
       return;
@@ -114,19 +117,27 @@
     list.innerHTML = '';
     for (const r of sorted) {
       const row = document.createElement('div');
-      row.className = 'entry-row clickable';
+      row.className = 'entry-row clickable' + (r.paid ? ' paid' : '');
       const open = receiptOpenCount(r);
       row.innerHTML = `
+        <button class="receipt-paid-check ${r.paid ? 'checked' : ''}" type="button" aria-label="Beleg als bezahlt markieren">✓</button>
         <div class="entry-main">
           <div class="entry-date">${dateFmt.format(new Date(r.createdAt))}</div>
           <div class="entry-time">${r.items.length} Artikel</div>
           <span class="badge ${open > 0 ? 'open' : 'done'}">${open > 0 ? open + ' offen' : 'fertig zugeordnet'}</span>
+          ${r.paid ? '<span class="badge paid">bezahlt</span>' : ''}
         </div>
         <div class="entry-total-wrap">
           <div class="entry-total">${fmtMoney(receiptTotal(r))}</div>
         </div>
         <div class="entry-chevron">›</div>
       `;
+      row.querySelector('.receipt-paid-check').addEventListener('click', (e) => {
+        e.stopPropagation();
+        r.paid = !r.paid;
+        saveReceipts();
+        renderStart();
+      });
       row.addEventListener('click', () => {
         state.filterReceiptId = r.id;
         switchView('assign');
@@ -302,6 +313,7 @@
       for (const emp of employees) {
         const own = flat.filter(x => x.item.assignedTo === emp.id);
         const total = own.reduce((s, x) => s + x.item.price, 0);
+        const paidTotal = own.filter(x => x.item.paid).reduce((s, x) => s + x.item.price, 0);
         const card = document.createElement('div');
         card.className = 'summary-card';
         card.innerHTML = `
@@ -311,11 +323,28 @@
             <span class="count">${own.length} Artikel</span>
             <span class="total">${fmtMoney(total)}</span>
           </div>
-          ${own.length ? `<div class="summary-card-items">${own.map(x => `<div class="summary-item-line"><span></span><span>${fmtMoney(x.item.price)}</span></div>`).join('')}</div>` : ''}
+          ${paidTotal > 0 ? `<div class="summary-paid-note">davon bezahlt: ${fmtMoney(paidTotal)}</div>` : ''}
+          ${own.length ? `<div class="summary-card-items">${own.map(x => `
+            <div class="summary-item-line${x.item.paid ? ' paid' : ''}" data-item-id="${x.item.id}">
+              <button class="summary-item-check${x.item.paid ? ' checked' : ''}" type="button" aria-label="Artikel als bezahlt markieren">✓</button>
+              <span class="summary-item-name"></span>
+              <span class="summary-item-price">${fmtMoney(x.item.price)}</span>
+            </div>`).join('')}</div>` : ''}
         `;
         card.querySelector('.name').textContent = emp.name;
         if (own.length) {
-          card.querySelectorAll('.summary-item-line span:first-child').forEach((el, idx) => { el.textContent = own[idx].item.name; });
+          card.querySelectorAll('.summary-item-name').forEach((el, idx) => { el.textContent = own[idx].item.name; });
+          card.querySelectorAll('.summary-item-line').forEach((lineEl) => {
+            const itemId = lineEl.dataset.itemId;
+            lineEl.querySelector('.summary-item-check').addEventListener('click', () => {
+              const found = findItemById(itemId);
+              if (found) {
+                found.item.paid = !found.item.paid;
+                saveReceipts();
+                renderAll();
+              }
+            });
+          });
         }
         list.appendChild(card);
       }
@@ -746,12 +775,12 @@
       const name = row.name.trim();
       if (!name || !(row.unitPrice > 0)) continue;
       for (let i = 0; i < row.qty; i++) {
-        expanded.push({ id: generateId(), name, price: Math.round(row.unitPrice * 100) / 100, assignedTo: null });
+        expanded.push({ id: generateId(), name, price: Math.round(row.unitPrice * 100) / 100, assignedTo: null, paid: false });
       }
     }
     if (expanded.length === 0) return;
 
-    receipts.push({ id: generateId(), createdAt: Date.now(), items: expanded });
+    receipts.push({ id: generateId(), createdAt: Date.now(), items: expanded, paid: false });
     saveReceipts();
     closeReviewOverlay();
     switchView('start');
