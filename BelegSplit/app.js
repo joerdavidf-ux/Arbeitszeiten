@@ -12,6 +12,9 @@
   const PDFJS_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
   const PDFJS_WORKER_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   const COLORS = ['#fbbf24', '#38bdf8', '#f472b6', '#4ade80', '#a78bfa', '#fb923c', '#22d3ee', '#f87171'];
+  // Bump alongside CACHE_NAME in sw.js on every release — shown in
+  // Einstellungen so it's obvious whether an old cached version is stuck.
+  const APP_VERSION = 'v14';
 
   function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1082,5 +1085,6 @@
   });
 
   // ---------- Init ----------
+  document.getElementById('app-version').textContent = 'App-Version: ' + APP_VERSION;
   renderAll();
 })();

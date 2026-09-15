@@ -1,4 +1,4 @@
-const CACHE_NAME = 'belegsplit-cache-v13';
+const CACHE_NAME = 'belegsplit-cache-v14';
 const ASSETS = [
   './',
   './index.html',
@@ -13,7 +13,10 @@ const ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(ASSETS))
+      // cache: 'reload' bypasses the browser's own HTTP cache for the
+      // precache fetch, so a stale cached copy of e.g. app.js can't get
+      // baked into the new service-worker version too.
+      .then((cache) => cache.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' }))))
       .then(() => self.skipWaiting())
   );
 });
@@ -36,7 +39,7 @@ self.addEventListener('fetch', (event) => {
     // Network-first for the app shell HTML, so updates arrive as soon as
     // the phone is online again, with the cache only as an offline fallback.
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then((response) => {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
