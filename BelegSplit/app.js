@@ -358,12 +358,17 @@
         card.className = 'summary-card';
         card.innerHTML = `
           <div class="summary-card-header">
-            ${own.length ? `<button class="person-paid-check${allPaid ? ' checked' : ''}" type="button" aria-label="Alles bei ${emp.name} als bezahlt markieren">✓</button>` : ''}
             <span class="avatar-dot" style="background:${emp.color}">${initials(emp.name)}</span>
             <span class="name"></span>
             <span class="count">${own.length} Artikel</span>
             <span class="total">${fmtMoney(openTotal)}</span>
           </div>
+          ${own.length ? `
+          <div class="summary-actions">
+            <button class="mark-all-paid-btn${allPaid ? ' active' : ''}" type="button">
+              <span class="mark-all-paid-check">✓</span>${allPaid ? 'Alles bezahlt' : `Alles bei ${escapeAttr(emp.name)} als bezahlt markieren`}
+            </button>
+          </div>` : ''}
           ${paidTotal > 0 ? `<div class="summary-paid-note">Gesamt: ${fmtMoney(total)} · bereits bezahlt: ${fmtMoney(paidTotal)}</div>` : ''}
           ${own.length ? `<div class="summary-card-items">${own.map(x => `
             <div class="summary-item-line${x.item.paid ? ' paid' : ''}" data-item-id="${x.item.id}">
@@ -374,7 +379,7 @@
         `;
         card.querySelector('.name').textContent = emp.name;
         if (own.length) {
-          card.querySelector('.person-paid-check').addEventListener('click', () => {
+          card.querySelector('.mark-all-paid-btn').addEventListener('click', () => {
             const markPaid = !allPaid;
             for (const x of own) x.item.paid = markPaid;
             saveReceipts();
