@@ -42,7 +42,8 @@
     filterReceiptId: null,
     filterEmployeeId: null,
     assignStatusFilter: 'offen',
-    selection: new Set()
+    selection: new Set(),
+    expandedEmployees: new Set()
   };
 
   // Transient review session (not persisted until "Übernehmen")
@@ -354,23 +355,25 @@
         const paidTotal = own.filter(x => x.item.paid).reduce((s, x) => s + x.item.price, 0);
         const openTotal = total - paidTotal;
         const allPaid = own.length > 0 && own.every(x => x.item.paid);
+        const expanded = state.expandedEmployees.has(emp.id);
         const card = document.createElement('div');
         card.className = 'summary-card';
         card.innerHTML = `
-          <div class="summary-card-header">
+          <div class="summary-card-header${own.length ? ' toggleable' : ''}">
             <span class="avatar-dot" style="background:${emp.color}">${initials(emp.name)}</span>
             <span class="name"></span>
             <span class="count">${own.length} Artikel</span>
             <span class="total">${fmtMoney(openTotal)}</span>
+            ${own.length ? `<span class="card-chevron${expanded ? ' expanded' : ''}">›</span>` : ''}
           </div>
-          ${own.length ? `
+          ${paidTotal > 0 ? `<div class="summary-paid-note">Gesamt: ${fmtMoney(total)} · bereits bezahlt: ${fmtMoney(paidTotal)}</div>` : ''}
+          ${own.length && expanded ? `
           <div class="summary-actions">
             <button class="mark-all-paid-btn${allPaid ? ' active' : ''}" type="button">
               <span class="mark-all-paid-check">✓</span>${allPaid ? 'Alles bezahlt' : `Alles bei ${escapeAttr(emp.name)} als bezahlt markieren`}
             </button>
-          </div>` : ''}
-          ${paidTotal > 0 ? `<div class="summary-paid-note">Gesamt: ${fmtMoney(total)} · bereits bezahlt: ${fmtMoney(paidTotal)}</div>` : ''}
-          ${own.length ? `<div class="summary-card-items">${own.map(x => `
+          </div>
+          <div class="summary-card-items">${own.map(x => `
             <div class="summary-item-line${x.item.paid ? ' paid' : ''}" data-item-id="${x.item.id}">
               <button class="summary-item-check${x.item.paid ? ' checked' : ''}" type="button" aria-label="Artikel als bezahlt markieren">✓</button>
               <span class="summary-item-name"></span>
@@ -379,7 +382,15 @@
         `;
         card.querySelector('.name').textContent = emp.name;
         if (own.length) {
-          card.querySelector('.mark-all-paid-btn').addEventListener('click', () => {
+          card.querySelector('.summary-card-header').addEventListener('click', () => {
+            if (state.expandedEmployees.has(emp.id)) state.expandedEmployees.delete(emp.id);
+            else state.expandedEmployees.add(emp.id);
+            renderSummary();
+          });
+        }
+        if (own.length && expanded) {
+          card.querySelector('.mark-all-paid-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
             const markPaid = !allPaid;
             for (const x of own) x.item.paid = markPaid;
             saveReceipts();
