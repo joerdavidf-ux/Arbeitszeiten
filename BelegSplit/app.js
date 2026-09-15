@@ -632,6 +632,7 @@
       retakeBtn.hidden = true;
     }
     document.getElementById('ocr-status').hidden = true;
+    document.getElementById('ocr-raw-wrap').hidden = true;
     renderReviewRows();
     document.getElementById('review-overlay').classList.add('active');
   }
@@ -815,7 +816,17 @@
       ocrStatus.hidden = true;
       if (reviewRows) {
         reviewRows = parsed.length ? parsed : [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }];
-        if (parsed.length === 0) toast('Keine Artikel automatisch erkannt – bitte manuell eintragen');
+        if (parsed.length === 0) {
+          const rawWrap = document.getElementById('ocr-raw-wrap');
+          const rawText = (text || '').trim();
+          if (rawText) {
+            document.getElementById('ocr-raw-text').value = rawText;
+            rawWrap.hidden = false;
+            toast('Erkannter Text konnte keinem Artikel zugeordnet werden');
+          } else {
+            toast('Auf dem Foto konnte gar kein Text erkannt werden');
+          }
+        }
         renderReviewRows();
       }
     } catch (err) {

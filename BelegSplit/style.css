@@ -471,6 +471,26 @@ nav.tabbar button.active { color: var(--accent); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.ocr-raw-wrap {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.ocr-raw-wrap .row-desc { font-size: 13px; color: var(--text-dim); margin-bottom: 10px; }
+.ocr-raw-wrap textarea {
+  width: 100%;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: ui-monospace, monospace;
+  padding: 10px;
+  resize: vertical;
+}
+
 .review-total-card {
   display: flex;
   justify-content: space-between;
