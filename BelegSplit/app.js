@@ -314,6 +314,7 @@
         const own = flat.filter(x => x.item.assignedTo === emp.id);
         const total = own.reduce((s, x) => s + x.item.price, 0);
         const paidTotal = own.filter(x => x.item.paid).reduce((s, x) => s + x.item.price, 0);
+        const openTotal = total - paidTotal;
         const card = document.createElement('div');
         card.className = 'summary-card';
         card.innerHTML = `
@@ -321,9 +322,9 @@
             <span class="avatar-dot" style="background:${emp.color}">${initials(emp.name)}</span>
             <span class="name"></span>
             <span class="count">${own.length} Artikel</span>
-            <span class="total">${fmtMoney(total)}</span>
+            <span class="total">${fmtMoney(openTotal)}</span>
           </div>
-          ${paidTotal > 0 ? `<div class="summary-paid-note">davon bezahlt: ${fmtMoney(paidTotal)}</div>` : ''}
+          ${paidTotal > 0 ? `<div class="summary-paid-note">Gesamt: ${fmtMoney(total)} · bereits bezahlt: ${fmtMoney(paidTotal)}</div>` : ''}
           ${own.length ? `<div class="summary-card-items">${own.map(x => `
             <div class="summary-item-line${x.item.paid ? ' paid' : ''}" data-item-id="${x.item.id}">
               <button class="summary-item-check${x.item.paid ? ' checked' : ''}" type="button" aria-label="Artikel als bezahlt markieren">✓</button>
@@ -366,22 +367,25 @@
   document.getElementById('btn-share-summary').addEventListener('click', async () => {
     const flat = allItemsFlat();
     let text = 'Kassenzettel-Abrechnung\n\n';
-    let grandTotal = 0;
+    let grandOpen = 0;
     for (const emp of employees) {
       const own = flat.filter(x => x.item.assignedTo === emp.id);
       if (own.length === 0) continue;
       const total = own.reduce((s, x) => s + x.item.price, 0);
-      grandTotal += total;
-      text += `${emp.name}: ${fmtMoney(total)}\n`;
-      for (const x of own) text += `  - ${x.item.name} ${fmtMoney(x.item.price)}\n`;
+      const paidTotal = own.filter(x => x.item.paid).reduce((s, x) => s + x.item.price, 0);
+      const openTotal = total - paidTotal;
+      grandOpen += openTotal;
+      text += `${emp.name}: ${fmtMoney(openTotal)}${paidTotal > 0 ? ` (Gesamt ${fmtMoney(total)}, bereits ${fmtMoney(paidTotal)} bezahlt)` : ''}\n`;
+      for (const x of own) text += `  ${x.item.paid ? '✓' : '-'} ${x.item.name} ${fmtMoney(x.item.price)}\n`;
       text += '\n';
     }
     const unassigned = flat.filter(x => !x.item.assignedTo);
     if (unassigned.length > 0) {
       const uTotal = unassigned.reduce((s, x) => s + x.item.price, 0);
       text += `Nicht zugeordnet: ${fmtMoney(uTotal)} (${unassigned.length} Artikel)\n\n`;
+      grandOpen += uTotal;
     }
-    text += `Gesamt: ${fmtMoney(grandTotal + unassigned.reduce((s, x) => s + x.item.price, 0))}`;
+    text += `Gesamt offen: ${fmtMoney(grandOpen)}`;
 
     if (navigator.share) {
       try { await navigator.share({ text }); return; } catch (e) { /* user cancelled or unsupported, fall through */ }
