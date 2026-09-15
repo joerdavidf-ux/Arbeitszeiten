@@ -478,6 +478,41 @@
     });
   }
 
+  // Grayscale + robust contrast stretch (ignores the top/bottom 1% of pixel
+  // values as outliers, e.g. glare or a dark shadow corner) — this alone
+  // makes a big difference for thermal-paper receipt OCR accuracy.
+  function preprocessForOcr(sourceCanvas) {
+    const w = sourceCanvas.width, h = sourceCanvas.height;
+    const imgData = sourceCanvas.getContext('2d').getImageData(0, 0, w, h);
+    const d = imgData.data;
+    const n = w * h;
+    const gray = new Uint8ClampedArray(n);
+    const hist = new Uint32Array(256);
+    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+      const g = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0;
+      gray[p] = g;
+      hist[g]++;
+    }
+    const clip = Math.floor(n * 0.01);
+    let lo = 0, acc = 0;
+    while (lo < 255 && acc < clip) { acc += hist[lo]; lo++; }
+    let hi = 255; acc = 0;
+    while (hi > 0 && acc < clip) { acc += hist[hi]; hi--; }
+    if (hi <= lo) { lo = 0; hi = 255; }
+    const range = hi - lo || 1;
+
+    for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+      let v = Math.round((gray[p] - lo) * 255 / range);
+      if (v < 0) v = 0; else if (v > 255) v = 255;
+      d[i] = d[i + 1] = d[i + 2] = v;
+    }
+    const out = document.createElement('canvas');
+    out.width = w;
+    out.height = h;
+    out.getContext('2d').putImageData(imgData, 0, 0);
+    return out;
+  }
+
   // ---------- Receipt text parsing ----------
   const SKIP_LINE_RE = /(summe|gesamt(?!\s*\d)|zu\s*zahlen|z\.?\s*zahlen|gegeben|zur[uü]ck|r[uü]ckgeld|ec[- ]?cash|kartenzahlung|girocard|bar\s*zahlung|mwst|ust\b|steuer|netto|brutto|^datum|uhrzeit|bon[- ]?nr|trace|terminal|beleg[- ]?nr|kassenbon|vielen\s*dank|wiedersehen|kunden\s*karte|payback|punkte\s*gesammelt|rabatt|abzug|gutschein|tse\b|signatur|seriennummer|kassierer|kasse\s*\d|steuernummer|ust-?idnr|www\.|http)/i;
 
@@ -746,17 +781,37 @@
     ocrStatus.hidden = false;
     ocrText.textContent = 'Texterkennung wird geladen …';
 
+    let worker = null;
     try {
       await loadTesseract();
       ocrText.textContent = 'Text wird erkannt … (kann beim ersten Mal etwas dauern)';
-      const result = await window.Tesseract.recognize(canvas, 'deu', {
-        logger: (m) => {
-          if (m.status === 'recognizing text' && typeof m.progress === 'number') {
-            ocrText.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)}%`;
-          }
+      const ocrCanvas = preprocessForOcr(canvas);
+      const progressLogger = (m) => {
+        if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+          ocrText.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)}%`;
         }
-      });
-      const parsed = parseReceiptText(result.data.text || '');
+      };
+
+      let text;
+      try {
+        // Manual worker so we can set a page-segmentation mode tuned for
+        // receipts (a single uniform block of short lines) instead of
+        // Tesseract's fully-automatic layout detection, which tends to
+        // struggle with logos/barcodes on receipts.
+        worker = await window.Tesseract.createWorker('deu', 1, { logger: progressLogger });
+        await worker.setParameters({ tessedit_pageseg_mode: '6' });
+        const result = await worker.recognize(ocrCanvas);
+        text = result.data.text;
+      } catch (workerErr) {
+        // Fall back to the simple convenience API if the worker/PSM setup
+        // above fails for any reason, so a scan never comes up completely empty.
+        const result = await window.Tesseract.recognize(ocrCanvas, 'deu', { logger: progressLogger });
+        text = result.data.text;
+      } finally {
+        if (worker) { worker.terminate().catch(() => {}); worker = null; }
+      }
+
+      const parsed = parseReceiptText(text || '');
       ocrStatus.hidden = true;
       if (reviewRows) {
         reviewRows = parsed.length ? parsed : [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }];
