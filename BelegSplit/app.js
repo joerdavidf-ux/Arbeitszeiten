@@ -315,10 +315,12 @@
         const total = own.reduce((s, x) => s + x.item.price, 0);
         const paidTotal = own.filter(x => x.item.paid).reduce((s, x) => s + x.item.price, 0);
         const openTotal = total - paidTotal;
+        const allPaid = own.length > 0 && own.every(x => x.item.paid);
         const card = document.createElement('div');
         card.className = 'summary-card';
         card.innerHTML = `
           <div class="summary-card-header">
+            ${own.length ? `<button class="person-paid-check${allPaid ? ' checked' : ''}" type="button" aria-label="Alles bei ${emp.name} als bezahlt markieren">✓</button>` : ''}
             <span class="avatar-dot" style="background:${emp.color}">${initials(emp.name)}</span>
             <span class="name"></span>
             <span class="count">${own.length} Artikel</span>
@@ -334,6 +336,12 @@
         `;
         card.querySelector('.name').textContent = emp.name;
         if (own.length) {
+          card.querySelector('.person-paid-check').addEventListener('click', () => {
+            const markPaid = !allPaid;
+            for (const x of own) x.item.paid = markPaid;
+            saveReceipts();
+            renderAll();
+          });
           card.querySelectorAll('.summary-item-name').forEach((el, idx) => { el.textContent = own[idx].item.name; });
           card.querySelectorAll('.summary-item-line').forEach((lineEl) => {
             const itemId = lineEl.dataset.itemId;

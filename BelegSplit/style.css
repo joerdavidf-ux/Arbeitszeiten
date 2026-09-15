@@ -399,6 +399,25 @@ nav.tabbar button.active { color: var(--accent); }
 .summary-card-header .name { flex: 1; font-weight: 700; font-size: 15px; }
 .summary-card-header .count { font-size: 12px; color: var(--text-dim); margin-right: 4px; }
 .summary-card-header .total { font-size: 17px; font-weight: 700; color: var(--accent); }
+
+.person-paid-check {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: none;
+  color: transparent;
+  flex-shrink: 0;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.person-paid-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
 .summary-paid-note {
   padding: 0 16px 10px;
   margin-top: -6px;
