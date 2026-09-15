@@ -4,6 +4,8 @@
   const STORAGE_EMPLOYEES = 'belegsplit_employees_v1';
   const STORAGE_RECEIPTS = 'belegsplit_receipts_v1';
   const TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+  const PDFJS_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs';
+  const PDFJS_WORKER_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs';
   const COLORS = ['#fbbf24', '#38bdf8', '#f472b6', '#4ade80', '#a78bfa', '#fb923c', '#22d3ee', '#f87171'];
 
   function generateId() {
@@ -768,10 +770,172 @@
     if (parsed.length === 0) toast('Keine Artikel erkannt – bitte manuell eintragen');
   });
 
+  function setOcrStatus(msg) {
+    const ocrStatus = document.getElementById('ocr-status');
+    const ocrText = document.getElementById('ocr-status-text');
+    ocrStatus.hidden = false;
+    ocrText.textContent = msg;
+  }
+
+  async function runOcrOnCanvas(canvas) {
+    setOcrStatus('Texterkennung wird geladen …');
+    await loadTesseract();
+    setOcrStatus('Text wird erkannt … (kann beim ersten Mal etwas dauern)');
+    const ocrCanvas = preprocessForOcr(canvas);
+    const progressLogger = (m) => {
+      if (m.status === 'recognizing text' && typeof m.progress === 'number') {
+        setOcrStatus(`Text wird erkannt … ${Math.round(m.progress * 100)}%`);
+      }
+    };
+
+    let worker = null;
+    try {
+      // Manual worker so we can set a page-segmentation mode tuned for
+      // receipts (a single uniform block of short lines) instead of
+      // Tesseract's fully-automatic layout detection, which tends to
+      // struggle with logos/barcodes on receipts.
+      worker = await window.Tesseract.createWorker('deu', 1, { logger: progressLogger });
+      await worker.setParameters({ tessedit_pageseg_mode: '6' });
+      const result = await worker.recognize(ocrCanvas);
+      return result.data.text;
+    } catch (workerErr) {
+      // Fall back to the simple convenience API if the worker/PSM setup
+      // above fails for any reason, so a scan never comes up completely empty.
+      const result = await window.Tesseract.recognize(ocrCanvas, 'deu', { logger: progressLogger });
+      return result.data.text;
+    } finally {
+      if (worker) worker.terminate().catch(() => {});
+    }
+  }
+
+  // Applies recognized/extracted text to the currently open review overlay:
+  // parses it into rows, or — if nothing could be matched — shows the raw
+  // text so the source of the problem (bad recognition vs. unusual layout)
+  // is visible instead of just an empty row.
+  function applyRecognizedText(text, { sourceLabel }) {
+    const parsed = parseReceiptText(text || '');
+    document.getElementById('ocr-status').hidden = true;
+    if (!reviewRows) return;
+    reviewRows = parsed.length ? parsed : [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }];
+    if (parsed.length === 0) {
+      const rawWrap = document.getElementById('ocr-raw-wrap');
+      const rawText = (text || '').trim();
+      if (rawText) {
+        document.getElementById('ocr-raw-text').value = rawText;
+        rawWrap.hidden = false;
+        toast('Erkannter Text konnte keinem Artikel zugeordnet werden');
+      } else {
+        toast(`Aus ${sourceLabel} konnte kein Text gelesen werden`);
+      }
+    }
+    renderReviewRows();
+  }
+
+  // ---------- PDF handling ----------
+  let pdfjsLoadPromise = null;
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    if (pdfjsLoadPromise) return pdfjsLoadPromise;
+    pdfjsLoadPromise = import(PDFJS_SRC)
+      .then((mod) => {
+        mod.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
+        window.pdfjsLib = mod;
+        return mod;
+      })
+      .catch((err) => {
+        pdfjsLoadPromise = null;
+        throw new Error('PDF-Bibliothek konnte nicht geladen werden. Internetverbindung erforderlich (einmalig).');
+      });
+    return pdfjsLoadPromise;
+  }
+
+  // Groups pdf.js's flat per-glyph-run text items back into lines by their
+  // vertical position — getTextContent() has no notion of "line" on its own.
+  function linesFromPdfTextItems(items) {
+    const rows = [];
+    let currentY = null;
+    let currentLine = [];
+    for (const item of items) {
+      if (!item.str) continue;
+      const y = item.transform ? item.transform[5] : 0;
+      if (currentY === null || Math.abs(y - currentY) > 2) {
+        if (currentLine.length) rows.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+        currentLine = [];
+        currentY = y;
+      }
+      currentLine.push(item.str);
+    }
+    if (currentLine.length) rows.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+    return rows.filter(Boolean);
+  }
+
+  async function extractPdfText(pdf) {
+    const allLines = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const content = await page.getTextContent();
+      allLines.push(...linesFromPdfTextItems(content.items));
+    }
+    return allLines.join('\n');
+  }
+
+  async function renderPdfPageToCanvas(pdf, pageNum, scale) {
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    return canvas;
+  }
+
+  async function handlePdfFile(file) {
+    openReviewOverlay({ initialRows: [] });
+    setOcrStatus('PDF wird gelesen …');
+    try {
+      await loadPdfJs();
+      const data = await file.arrayBuffer();
+      const pdf = await window.pdfjsLib.getDocument({ data }).promise;
+
+      const extractedText = (await extractPdfText(pdf)).trim();
+      // A PDF with a real text layer (an emailed/app receipt, not a scan)
+      // gives exact text — far more reliable than OCR, so prefer it and
+      // skip OCR entirely whenever there's enough of it to be the receipt
+      // content rather than just a stray header/watermark.
+      if (extractedText.length > 30) {
+        applyRecognizedText(extractedText, { sourceLabel: 'dem PDF' });
+        return;
+      }
+
+      // No usable text layer — it's a scanned/photographed PDF. Render the
+      // first page to an image and run it through the same OCR path as a photo.
+      setOcrStatus('Kein Text im PDF gefunden – Seite wird als Bild erkannt …');
+      const pageCanvas = await renderPdfPageToCanvas(pdf, 1, 2.5);
+      const photoWrap = document.getElementById('review-photo-wrap');
+      document.getElementById('review-photo').src = pageCanvas.toDataURL('image/jpeg', 0.85);
+      photoWrap.hidden = false;
+      const text = await runOcrOnCanvas(pageCanvas);
+      applyRecognizedText(text, { sourceLabel: 'der PDF-Seite' });
+    } catch (err) {
+      document.getElementById('ocr-status').hidden = true;
+      toast(err && err.message ? err.message : 'PDF konnte nicht gelesen werden');
+      if (reviewRows && reviewRows.length === 0) {
+        reviewRows = [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }];
+        renderReviewRows();
+      }
+    }
+  }
+
   document.getElementById('file-input').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
+
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+    if (isPdf) {
+      await handlePdfFile(file);
+      return;
+    }
 
     let photoUrl, canvas;
     try {
@@ -784,60 +948,11 @@
     }
 
     openReviewOverlay({ initialRows: [], photoUrl });
-    const ocrStatus = document.getElementById('ocr-status');
-    const ocrText = document.getElementById('ocr-status-text');
-    ocrStatus.hidden = false;
-    ocrText.textContent = 'Texterkennung wird geladen …';
-
-    let worker = null;
     try {
-      await loadTesseract();
-      ocrText.textContent = 'Text wird erkannt … (kann beim ersten Mal etwas dauern)';
-      const ocrCanvas = preprocessForOcr(canvas);
-      const progressLogger = (m) => {
-        if (m.status === 'recognizing text' && typeof m.progress === 'number') {
-          ocrText.textContent = `Text wird erkannt … ${Math.round(m.progress * 100)}%`;
-        }
-      };
-
-      let text;
-      try {
-        // Manual worker so we can set a page-segmentation mode tuned for
-        // receipts (a single uniform block of short lines) instead of
-        // Tesseract's fully-automatic layout detection, which tends to
-        // struggle with logos/barcodes on receipts.
-        worker = await window.Tesseract.createWorker('deu', 1, { logger: progressLogger });
-        await worker.setParameters({ tessedit_pageseg_mode: '6' });
-        const result = await worker.recognize(ocrCanvas);
-        text = result.data.text;
-      } catch (workerErr) {
-        // Fall back to the simple convenience API if the worker/PSM setup
-        // above fails for any reason, so a scan never comes up completely empty.
-        const result = await window.Tesseract.recognize(ocrCanvas, 'deu', { logger: progressLogger });
-        text = result.data.text;
-      } finally {
-        if (worker) { worker.terminate().catch(() => {}); worker = null; }
-      }
-
-      const parsed = parseReceiptText(text || '');
-      ocrStatus.hidden = true;
-      if (reviewRows) {
-        reviewRows = parsed.length ? parsed : [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }];
-        if (parsed.length === 0) {
-          const rawWrap = document.getElementById('ocr-raw-wrap');
-          const rawText = (text || '').trim();
-          if (rawText) {
-            document.getElementById('ocr-raw-text').value = rawText;
-            rawWrap.hidden = false;
-            toast('Erkannter Text konnte keinem Artikel zugeordnet werden');
-          } else {
-            toast('Auf dem Foto konnte gar kein Text erkannt werden');
-          }
-        }
-        renderReviewRows();
-      }
+      const text = await runOcrOnCanvas(canvas);
+      applyRecognizedText(text, { sourceLabel: 'dem Foto' });
     } catch (err) {
-      ocrStatus.hidden = true;
+      document.getElementById('ocr-status').hidden = true;
       toast(err && err.message ? err.message : 'Texterkennung fehlgeschlagen');
       if (reviewRows && reviewRows.length === 0) {
         reviewRows = [{ id: generateId(), name: '', unitPrice: 0, qty: 1 }];

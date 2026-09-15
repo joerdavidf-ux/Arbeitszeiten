@@ -24,7 +24,7 @@
     <!-- START -->
     <section class="view active" id="view-start">
       <button class="scan-btn" id="btn-scan-receipt">
-        <span>📷</span> Foto oder Screenshot hinzufügen
+        <span>📎</span> Foto, Screenshot oder PDF hinzufügen
       </button>
       <button class="btn secondary" id="btn-paste-text" style="margin-bottom:10px;">
         📝 Text einfügen
@@ -104,7 +104,7 @@
       <div class="settings-group">
         <div class="settings-row">
           <div class="row-title">Über diese App</div>
-          <div class="row-desc">Belege läuft offline. Fotos werden nur auf diesem Gerät verarbeitet, um Artikel &amp; Preise zu erkennen – die Fotos selbst werden nicht gespeichert, nur die erkannten Texte. Für die Texterkennung wird beim allerersten Scan einmalig Internet benötigt, danach funktioniert sie auch offline. Es gibt keine Server-Verbindung und keinen Datenversand.</div>
+          <div class="row-desc">Belege läuft offline. Fotos, Screenshots und PDFs werden nur auf diesem Gerät verarbeitet, um Artikel &amp; Preise zu erkennen – sie selbst werden nicht gespeichert, nur die erkannten Texte. Für die Texterkennung wird beim allerersten Scan einmalig Internet benötigt, danach funktioniert sie auch offline. Es gibt keine Server-Verbindung und keinen Datenversand.</div>
         </div>
       </div>
     </section>
@@ -126,7 +126,7 @@
     </div>
   </div>
 
-  <input type="file" id="file-input" accept="image/*" hidden>
+  <input type="file" id="file-input" accept="image/*,application/pdf" hidden>
 
   <!-- Review overlay: photo scan + editable item list -->
   <div id="review-overlay">
