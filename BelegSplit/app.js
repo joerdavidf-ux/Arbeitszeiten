@@ -4,8 +4,13 @@
   const STORAGE_EMPLOYEES = 'belegsplit_employees_v1';
   const STORAGE_RECEIPTS = 'belegsplit_receipts_v1';
   const TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
-  const PDFJS_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs';
-  const PDFJS_WORKER_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs';
+  // Pinned to the last pdfjs-dist release with a classic (non-module) UMD
+  // build (window.pdfjsLib via a plain <script> tag) — v4+ ships ES modules
+  // only, and loading those via dynamic import() of a cross-origin URL runs
+  // into MIME-type/CORS module-loading quirks that plain <script> tags (the
+  // same approach already used for Tesseract) don't have.
+  const PDFJS_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+  const PDFJS_WORKER_SRC = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   const COLORS = ['#fbbf24', '#38bdf8', '#f472b6', '#4ade80', '#a78bfa', '#fb923c', '#22d3ee', '#f87171'];
 
   function generateId() {
@@ -536,6 +541,12 @@
     // A trailing "X01"-style piece-count code some tills print glued to the
     // item name (e.g. self-scan registers) — not meaningful, strip it.
     const trailingQtyCodeRe = /\s+[Xx]\d{2,3}$/;
+    // Some tills print the item name + line total on one line, then the
+    // quantity breakdown on its own indented line below with no name at
+    // all (e.g. "2 Stk x    3,00"). That's not a separate item — it
+    // belongs to the item line right above it and must update it in place,
+    // or it gets counted twice.
+    const qtyContinuationRe = /^(\d{1,3})\s*(?:stk|stück|stueck)\.?\s*[x×X]\s*$/i;
 
     for (const rawLine of lines) {
       if (SKIP_LINE_RE.test(rawLine)) continue;
@@ -545,6 +556,17 @@
       if (trailingPrice === null || trailingPrice <= 0 || trailingPrice > 500) continue;
       let rest = rawLine.slice(0, m.index).trim().replace(trailingQtyCodeRe, '').trim();
       if (!rest) continue;
+
+      const cm = rest.match(qtyContinuationRe);
+      if (cm && rows.length > 0) {
+        const qty = parseInt(cm[1], 10);
+        if (qty >= 1 && qty <= 50) {
+          const prev = rows[rows.length - 1];
+          prev.qty = qty;
+          prev.unitPrice = Math.round(trailingPrice * 100) / 100;
+        }
+        continue;
+      }
 
       let qty = 1;
       let unitPrice = trailingPrice;
@@ -836,16 +858,19 @@
   function loadPdfJs() {
     if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
     if (pdfjsLoadPromise) return pdfjsLoadPromise;
-    pdfjsLoadPromise = import(PDFJS_SRC)
-      .then((mod) => {
-        mod.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
-        window.pdfjsLib = mod;
-        return mod;
-      })
-      .catch((err) => {
+    pdfjsLoadPromise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = PDFJS_SRC;
+      s.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_SRC;
+        resolve(window.pdfjsLib);
+      };
+      s.onerror = () => {
         pdfjsLoadPromise = null;
-        throw new Error('PDF-Bibliothek konnte nicht geladen werden. Internetverbindung erforderlich (einmalig).');
-      });
+        reject(new Error('PDF-Bibliothek konnte nicht geladen werden. Internetverbindung erforderlich (einmalig).'));
+      };
+      document.head.appendChild(s);
+    });
     return pdfjsLoadPromise;
   }
 
