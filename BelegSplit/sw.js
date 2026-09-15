@@ -1,4 +1,4 @@
-const CACHE_NAME = 'belegsplit-cache-v4';
+const CACHE_NAME = 'belegsplit-cache-v5';
 const ASSETS = [
   './',
   './index.html',

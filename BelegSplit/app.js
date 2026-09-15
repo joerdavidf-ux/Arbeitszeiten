@@ -526,7 +526,14 @@
   function parseReceiptText(text) {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
     const rows = [];
-    const priceAtEndRe = /(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?\s*[A-Za-z]{0,2}\s*$/;
+    // Trailing part after the price is typically a tax-rate letter (A/B) and/or
+    // a "*" marker (scanner-till receipts flag every non-plain-VAT line with
+    // one) — both are optional and must be tolerated or the whole line is
+    // dropped.
+    const priceAtEndRe = /(-?\d{1,4}[.,]\d{2})\s*(?:€|EUR)?\s*[A-Za-z]{0,2}\s*[*#]?\s*$/;
+    // A trailing "X01"-style piece-count code some tills print glued to the
+    // item name (e.g. self-scan registers) — not meaningful, strip it.
+    const trailingQtyCodeRe = /\s+[Xx]\d{2,3}$/;
 
     for (const rawLine of lines) {
       if (SKIP_LINE_RE.test(rawLine)) continue;
@@ -534,7 +541,7 @@
       if (!m) continue;
       const trailingPrice = parsePriceToken(m[1]);
       if (trailingPrice === null || trailingPrice <= 0 || trailingPrice > 500) continue;
-      let rest = rawLine.slice(0, m.index).trim();
+      let rest = rawLine.slice(0, m.index).trim().replace(trailingQtyCodeRe, '').trim();
       if (!rest) continue;
 
       let qty = 1;
