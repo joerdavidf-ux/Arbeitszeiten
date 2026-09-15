@@ -40,6 +40,7 @@
   const state = {
     view: 'start',
     filterReceiptId: null,
+    filterEmployeeId: null,
     assignStatusFilter: 'offen',
     selection: new Set()
   };
@@ -166,8 +167,12 @@
       b.classList.toggle('active', b.dataset.status === state.assignStatusFilter);
     });
 
+    if (state.filterEmployeeId && !employeeById(state.filterEmployeeId)) state.filterEmployeeId = null;
+    renderPersonFilterChips();
+
     let items = allItemsFlat();
     if (state.filterReceiptId) items = items.filter(x => x.receiptId === state.filterReceiptId);
+    if (state.filterEmployeeId) items = items.filter(x => x.item.assignedTo === state.filterEmployeeId);
     if (state.assignStatusFilter === 'offen') items = items.filter(x => !x.item.assignedTo);
     else if (state.assignStatusFilter === 'zugeordnet') items = items.filter(x => x.item.assignedTo);
 
@@ -210,6 +215,39 @@
       list.appendChild(row);
     }
     updateSelectBar();
+  }
+
+  function renderPersonFilterChips() {
+    const row = document.getElementById('assign-person-filter');
+    if (employees.length === 0) {
+      row.innerHTML = '';
+      row.hidden = true;
+      return;
+    }
+    row.hidden = false;
+    row.innerHTML = '';
+    const allChip = document.createElement('button');
+    allChip.type = 'button';
+    allChip.className = 'person-filter-chip' + (state.filterEmployeeId ? '' : ' active');
+    allChip.textContent = 'Alle';
+    allChip.addEventListener('click', () => {
+      state.filterEmployeeId = null;
+      renderAssign();
+    });
+    row.appendChild(allChip);
+    for (const emp of employees) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'person-filter-chip' + (state.filterEmployeeId === emp.id ? ' active' : '');
+      chip.innerHTML = `<span class="avatar-dot" style="background:${emp.color}">${initials(emp.name)}</span><span></span>`;
+      chip.querySelector('span:last-child').textContent = emp.name;
+      chip.addEventListener('click', () => {
+        state.filterEmployeeId = emp.id;
+        if (state.assignStatusFilter === 'offen') state.assignStatusFilter = 'alle';
+        renderAssign();
+      });
+      row.appendChild(chip);
+    }
   }
 
   function updateSelectBar() {

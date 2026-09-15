@@ -192,6 +192,37 @@ main {
   font-weight: 600;
 }
 
+.person-filter-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+.person-filter-row:empty { margin-bottom: 0; }
+.person-filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 14px 7px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.person-filter-chip:first-child { padding-left: 14px; }
+.person-filter-chip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.person-filter-chip .avatar-dot { width: 20px; height: 20px; font-size: 9px; }
+
 .settings-group {
   background: var(--bg-elev);
   border: 1px solid var(--border);
