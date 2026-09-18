@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Belege</title>
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Belege">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar" id="topbar-title">Belege</header>
+
+  <main>
+
+    <!-- START -->
+    <section class="view active" id="view-start">
+      <button class="scan-btn" id="btn-scan-receipt">
+        <span>📎</span> Foto, Screenshot oder PDF hinzufügen
+      </button>
+      <button class="btn secondary" id="btn-paste-text" style="margin-bottom:10px;">
+        📝 Text einfügen
+      </button>
+      <button class="btn secondary" id="btn-manual-receipt" style="margin-bottom:20px;">
+        ✏️ Ohne Foto manuell erfassen
+      </button>
+
+      <div class="section-title">Belege</div>
+      <div class="entry-list" id="receipt-list">
+        <div class="empty-hint">Noch keine Belege erfasst</div>
+      </div>
+    </section>
+
+    <!-- ZUORDNEN -->
+    <section class="view" id="view-assign">
+      <div class="filter-chip-row" id="assign-filter-receipt" hidden>
+        <span id="assign-filter-label">Beleg</span>
+        <button id="assign-filter-clear">Alle Belege anzeigen ✕</button>
+      </div>
+
+      <div class="segmented" id="assign-status-switch">
+        <button class="segmented-btn active" data-status="offen">Offen</button>
+        <button class="segmented-btn" data-status="zugeordnet">Zugeordnet</button>
+        <button class="segmented-btn" data-status="alle">Alle</button>
+      </div>
+
+      <div class="person-filter-row" id="assign-person-filter"></div>
+
+      <div class="entry-list" id="assign-list">
+        <div class="empty-hint">Keine Artikel vorhanden</div>
+      </div>
+    </section>
+
+    <!-- ÜBERSICHT -->
+    <section class="view" id="view-summary">
+      <div class="section-title">Pro Person</div>
+      <div id="summary-list">
+        <div class="empty-hint">Noch keine Personen angelegt</div>
+      </div>
+
+      <div class="unassigned-card" id="summary-unassigned" hidden>
+        <span>Noch nicht zugeordnet</span>
+        <strong id="summary-unassigned-value">0,00 €</strong>
+      </div>
+
+      <button class="btn secondary" id="btn-share-summary" style="margin-top:16px;">
+        📤 Zusammenfassung teilen
+      </button>
+    </section>
+
+    <!-- EINSTELLUNGEN -->
+    <section class="view" id="view-settings">
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Personen</div>
+          <div class="row-desc">Mitarbeiter, denen du Artikel zuordnen kannst.</div>
+          <div id="employee-manage-list"></div>
+          <div class="add-employee-row">
+            <input type="text" id="new-employee-name" placeholder="Name eingeben">
+            <button class="btn small" id="btn-add-employee">+ Hinzufügen</button>
+          </div>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Alle Belege löschen</div>
+          <div class="row-desc">Löscht alle erfassten Belege und Artikel unwiderruflich. Personen bleiben erhalten.</div>
+          <button class="btn danger" id="btn-clear-receipts">Belege löschen</button>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Alle Daten löschen</div>
+          <div class="row-desc">Löscht Belege, Artikel und Personen unwiderruflich.</div>
+          <button class="btn danger" id="btn-clear-all">Alles löschen</button>
+        </div>
+      </div>
+      <div class="settings-group">
+        <div class="settings-row">
+          <div class="row-title">Über diese App</div>
+          <div class="row-desc">Belege läuft offline. Fotos, Screenshots und PDFs werden nur auf diesem Gerät verarbeitet, um Artikel &amp; Preise zu erkennen – sie selbst werden nicht gespeichert, nur die erkannten Texte. Für die Texterkennung wird beim allerersten Scan einmalig Internet benötigt, danach funktioniert sie auch offline. Es gibt keine Server-Verbindung und keinen Datenversand.</div>
+          <div class="row-desc" id="app-version" style="margin-top:8px; margin-bottom:0;"></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <button class="tab-btn active" data-view="start"><span class="tab-icon">🧾</span>Belege</button>
+    <button class="tab-btn" data-view="assign"><span class="tab-icon">👥</span>Zuordnen</button>
+    <button class="tab-btn" data-view="summary"><span class="tab-icon">📊</span>Übersicht</button>
+    <button class="tab-btn" data-view="settings"><span class="tab-icon">⚙️</span>Einstellungen</button>
+  </nav>
+
+  <div class="select-bar" id="select-bar">
+    <span class="select-count" id="select-count">0 ausgewählt</span>
+    <div class="select-actions">
+      <button class="btn-clear-sel" id="btn-clear-selection">Abbrechen</button>
+      <button class="btn-assign" id="btn-open-assign-sheet">Zuweisen</button>
+    </div>
+  </div>
+
+  <input type="file" id="file-input" accept="image/*,application/pdf" hidden>
+
+  <!-- Review overlay: photo scan + editable item list -->
+  <div id="review-overlay">
+    <div class="review-topbar">
+      <button id="btn-review-cancel">Abbrechen</button>
+      <div class="review-title" id="review-title">Neuer Beleg</div>
+      <button id="btn-review-save" disabled>Übernehmen</button>
+    </div>
+    <div class="review-body">
+      <div class="review-photo-wrap" id="review-photo-wrap" hidden>
+        <img id="review-photo" alt="Beleg-Foto">
+      </div>
+      <div class="ocr-status" id="ocr-status" hidden>
+        <div class="ocr-spinner"></div>
+        <span id="ocr-status-text">Text wird erkannt …</span>
+      </div>
+      <div class="ocr-raw-wrap" id="ocr-raw-wrap" hidden>
+        <div class="row-desc">Es konnte kein Artikel automatisch zugeordnet werden. Das hat die Texterkennung auf dem Foto gelesen – du kannst es unten kopieren und in "Text einfügen" wieder einsetzen, oder die Artikel direkt manuell unten eintragen:</div>
+        <textarea id="ocr-raw-text" readonly rows="6"></textarea>
+      </div>
+      <div class="review-total-card">
+        <span>Zwischensumme (<span id="review-count">0</span> Artikel)</span>
+        <strong id="review-total">0,00 €</strong>
+      </div>
+      <div id="review-rows"></div>
+      <button class="btn secondary" id="btn-review-add-row">+ Position hinzufügen</button>
+      <button class="btn secondary" id="btn-review-retake" hidden>🔁 Erneut fotografieren</button>
+    </div>
+  </div>
+
+  <!-- Paste-text sheet -->
+  <div class="modal-backdrop" id="paste-text-backdrop">
+    <div class="modal-sheet">
+      <h3>Text einfügen</h3>
+      <p>Kopiere den Text vom Kassenzettel (z.&nbsp;B. aus einer Notiz oder E-Mail) hier hinein, oder tippe die Artikel einfach selbst ein – eine Zeile pro Artikel, Preis am Zeilenende.</p>
+      <textarea id="paste-text-input" placeholder="Milch 1,19&#10;Butter 2,49&#10;4x Wasser 4,00" rows="7"></textarea>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn secondary" id="paste-text-submit">Übernehmen</button>
+        <button class="btn secondary" id="paste-text-cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Single item edit sheet -->
+  <div class="modal-backdrop" id="item-edit-backdrop">
+    <div class="modal-sheet">
+      <h3>Artikel bearbeiten</h3>
+      <div class="review-row" style="margin-bottom:16px;">
+        <div class="review-row-top">
+          <input type="text" id="item-edit-name" placeholder="Artikelname">
+        </div>
+        <div class="review-row-bottom">
+          <div class="review-price-wrap">
+            <span>Preis</span>
+            <input type="number" id="item-edit-price" inputmode="decimal" step="0.01" min="0">
+            <span>€</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="item-edit-save">Speichern</button>
+        <button class="btn danger" id="item-edit-delete">Artikel löschen</button>
+        <button class="btn secondary" id="item-edit-cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign bottom sheet -->
+  <div class="modal-backdrop" id="assign-sheet-backdrop">
+    <div class="modal-sheet">
+      <h3 id="assign-sheet-title">Artikel zuweisen</h3>
+      <p>Wähle, wem diese Artikel gehören.</p>
+      <div class="employee-chip-grid" id="assign-sheet-employees"></div>
+      <div class="modal-actions">
+        <button class="btn secondary" id="assign-sheet-unassign">Zuordnung entfernen</button>
+        <button class="btn secondary" id="assign-sheet-cancel">Abbrechen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+</div>
+<script src="app.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
