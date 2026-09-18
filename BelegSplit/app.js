@@ -14,7 +14,7 @@
   const COLORS = ['#fbbf24', '#38bdf8', '#f472b6', '#4ade80', '#a78bfa', '#fb923c', '#22d3ee', '#f87171'];
   // Bump alongside CACHE_NAME in sw.js on every release — shown in
   // Einstellungen so it's obvious whether an old cached version is stuck.
-  const APP_VERSION = 'v14';
+  const APP_VERSION = 'v15';
 
   function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -801,9 +801,12 @@
       `;
       el.querySelector('.row-name').addEventListener('input', (e) => { row.name = e.target.value; updateReviewSaveState(); });
       el.querySelector('.row-price').addEventListener('input', (e) => {
+        // Update the model + totals only — do NOT rebuild the row list here.
+        // Rebuilding on every keystroke replaces this very input element,
+        // which drops focus after each digit typed.
         const v = parseFloat(e.target.value);
         row.unitPrice = isNaN(v) ? 0 : v;
-        renderReviewRows();
+        updateReviewTotals();
       });
       el.querySelector('.step-minus').addEventListener('click', () => {
         if (row.qty > 1) { row.qty--; renderReviewRows(); }
@@ -817,6 +820,13 @@
       });
       container.appendChild(el);
     }
+    document.getElementById('review-count').textContent = reviewRows.reduce((s, r) => s + r.qty, 0);
+    document.getElementById('review-total').textContent = fmtMoney(total);
+    updateReviewSaveState();
+  }
+
+  function updateReviewTotals() {
+    const total = reviewRows.reduce((s, r) => s + r.unitPrice * r.qty, 0);
     document.getElementById('review-count').textContent = reviewRows.reduce((s, r) => s + r.qty, 0);
     document.getElementById('review-total').textContent = fmtMoney(total);
     updateReviewSaveState();
