@@ -15,7 +15,7 @@
   const COLORS = ['#fbbf24', '#38bdf8', '#f472b6', '#4ade80', '#a78bfa', '#fb923c', '#22d3ee', '#f87171'];
   // Bump alongside CACHE_NAME in sw.js on every release — shown in
   // Einstellungen so it's obvious whether an old cached version is stuck.
-  const APP_VERSION = 'v16';
+  const APP_VERSION = 'v17';
 
   function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1262,6 +1262,39 @@
         renderReviewRows();
       }
     }
+  });
+
+  // ---------- Export (Umzug auf die neue Server-Version) ----------
+  function buildExportJson() {
+    return JSON.stringify({ app: 'belegsplit', version: 1, exportedAt: Date.now(), employees, receipts, shoppingList });
+  }
+  document.getElementById('btn-export-copy').addEventListener('click', async () => {
+    const json = buildExportJson();
+    try {
+      await navigator.clipboard.writeText(json);
+      toast('Daten kopiert – jetzt in der neuen App "Aus Zwischenablage importieren"');
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = json;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); toast('Daten kopiert – jetzt in der neuen App "Aus Zwischenablage importieren"'); }
+      catch (e2) { toast('Kopieren nicht möglich – bitte "Als Datei exportieren" nutzen'); }
+      document.body.removeChild(ta);
+    }
+  });
+  document.getElementById('btn-export-file').addEventListener('click', async () => {
+    const name = 'belegsplit-' + new Date().toISOString().slice(0, 10) + '.json';
+    const file = new File([buildExportJson()], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: name }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(file);
+    const link = document.createElement('a');
+    link.href = url; link.download = name;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
 
   // ---------- Init ----------
