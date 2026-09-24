@@ -3,6 +3,7 @@
 
   const STORAGE_EMPLOYEES = 'belegsplit_employees_v1';
   const STORAGE_RECEIPTS = 'belegsplit_receipts_v1';
+  const STORAGE_SHOPPING = 'belegsplit_shopping_v1';
   const TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
   // Pinned to the last pdfjs-dist release with a classic (non-module) UMD
   // build (window.pdfjsLib via a plain <script> tag) — v4+ ships ES modules
@@ -14,7 +15,7 @@
   const COLORS = ['#fbbf24', '#38bdf8', '#f472b6', '#4ade80', '#a78bfa', '#fb923c', '#22d3ee', '#f87171'];
   // Bump alongside CACHE_NAME in sw.js on every release — shown in
   // Einstellungen so it's obvious whether an old cached version is stuck.
-  const APP_VERSION = 'v15';
+  const APP_VERSION = 'v16';
 
   function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -37,8 +38,17 @@
   }
   function saveReceipts() { localStorage.setItem(STORAGE_RECEIPTS, JSON.stringify(receipts)); }
 
+  function loadShoppingList() {
+    try {
+      const raw = localStorage.getItem(STORAGE_SHOPPING);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function saveShoppingList() { localStorage.setItem(STORAGE_SHOPPING, JSON.stringify(shoppingList)); }
+
   let employees = loadEmployees();
   let receipts = loadReceipts();
+  let shoppingList = loadShoppingList();
 
   const state = {
     view: 'start',
@@ -46,7 +56,8 @@
     filterEmployeeId: null,
     assignStatusFilter: 'offen',
     selection: new Set(),
-    expandedEmployees: new Set()
+    expandedEmployees: new Set(),
+    expandedShoppingPeople: new Set()
   };
 
   // Transient review session (not persisted until "Übernehmen")
@@ -76,6 +87,34 @@
 
   function receiptTotal(r) { return r.items.reduce((s, i) => s + i.price, 0); }
   function receiptOpenCount(r) { return r.items.filter(i => !i.assignedTo).length; }
+
+  // Lowercase, strip everything but letters/digits, collapse whitespace —
+  // used both for product-name matching and shopping-list <-> receipt matching,
+  // so spelling/punctuation differences ("Schwip-Schwap" vs "SCHWIP SCHWAP")
+  // don't block an otherwise obvious match.
+  function normalizeProductText(s) {
+    // Strip whitespace entirely (not just collapse it) so "SCHWIP SCHWAP"
+    // (space, from a receipt scan) and "Schwipschwap" (no space, typed on
+    // the shopping list) still compare equal.
+    return (s || '').toLowerCase().replace(/[^a-z0-9äöüß]+/g, '');
+  }
+
+  // Distinct product names ever entered, each with its most recently seen
+  // price, most-recent-first — used for the shopping-list autocomplete.
+  function getKnownProducts() {
+    const byKey = new Map();
+    for (const r of receipts) {
+      for (const it of r.items) {
+        const key = normalizeProductText(it.name);
+        if (!key) continue;
+        const existing = byKey.get(key);
+        if (!existing || r.createdAt >= existing.createdAt) {
+          byKey.set(key, { name: it.name, price: it.price, createdAt: r.createdAt });
+        }
+      }
+    }
+    return [...byKey.values()].sort((a, b) => b.createdAt - a.createdAt);
+  }
 
   function initials(name) {
     return name.trim().slice(0, 2).toUpperCase();
@@ -492,15 +531,17 @@
         renderAll();
       });
       row.querySelector('.employee-delete').addEventListener('click', () => {
-        if (!confirm(`${emp.name} wirklich entfernen? Bereits zugeordnete Artikel werden wieder als "nicht zugeordnet" markiert.`)) return;
+        if (!confirm(`${emp.name} wirklich entfernen? Bereits zugeordnete Artikel werden wieder als "nicht zugeordnet" markiert, offene Einkaufsliste-Wünsche werden gelöscht.`)) return;
         employees = employees.filter(e => e.id !== emp.id);
         for (const r of receipts) {
           for (const it of r.items) {
             if (it.assignedTo === emp.id) it.assignedTo = null;
           }
         }
+        shoppingList = shoppingList.filter(e => e.employeeId !== emp.id);
         saveEmployees();
         saveReceipts();
+        saveShoppingList();
         renderAll();
       });
       list.appendChild(row);
@@ -546,6 +587,110 @@
     renderSummary();
     renderSettings();
   }
+
+  // ================== SHOPPING LIST ==================
+
+  function renderShoppingList() {
+    const container = document.getElementById('shopping-list-people');
+    if (employees.length === 0) {
+      container.innerHTML = '<div class="empty-hint">Noch keine Personen angelegt. Lege sie in den Einstellungen an.</div>';
+      return;
+    }
+    container.innerHTML = '';
+    for (const emp of employees) {
+      const entries = shoppingList.filter((e) => e.employeeId === emp.id);
+      const expanded = state.expandedShoppingPeople.has(emp.id);
+      const card = document.createElement('div');
+      card.className = 'shopping-person-card';
+      card.innerHTML = `
+        <div class="shopping-person-header">
+          <span class="avatar-dot" style="background:${emp.color}">${initials(emp.name)}</span>
+          <span class="name"></span>
+          <span class="count">${entries.length} ${entries.length === 1 ? 'Wunsch' : 'Wünsche'}</span>
+          <span class="card-chevron${expanded ? ' expanded' : ''}">›</span>
+        </div>
+        ${expanded ? `
+        <div class="shopping-entries">
+          ${entries.map((e) => `
+            <div class="shopping-entry-row">
+              <span class="entry-text"></span>
+              <button class="shopping-entry-delete" type="button" aria-label="Entfernen">×</button>
+            </div>`).join('')}
+          <div class="shopping-add-row">
+            <input type="text" class="shopping-add-input" placeholder="Produkt hinzufügen" autocomplete="off">
+            <button class="btn small shopping-add-btn" type="button">+</button>
+            <div class="shopping-suggestions"></div>
+          </div>
+        </div>` : ''}
+      `;
+      card.querySelector('.name').textContent = emp.name;
+      card.querySelector('.shopping-person-header').addEventListener('click', () => {
+        if (state.expandedShoppingPeople.has(emp.id)) state.expandedShoppingPeople.delete(emp.id);
+        else state.expandedShoppingPeople.add(emp.id);
+        renderShoppingList();
+      });
+
+      if (expanded) {
+        card.querySelectorAll('.shopping-entry-row').forEach((row, idx) => {
+          row.querySelector('.entry-text').textContent = entries[idx].text;
+          row.querySelector('.shopping-entry-delete').addEventListener('click', () => {
+            shoppingList = shoppingList.filter((e) => e.id !== entries[idx].id);
+            saveShoppingList();
+            renderShoppingList();
+          });
+        });
+
+        const input = card.querySelector('.shopping-add-input');
+        const suggestBox = card.querySelector('.shopping-suggestions');
+
+        const addEntry = () => {
+          const text = input.value.trim();
+          if (!text) return;
+          shoppingList.push({ id: generateId(), employeeId: emp.id, text, createdAt: Date.now() });
+          saveShoppingList();
+          renderShoppingList();
+        };
+        card.querySelector('.shopping-add-btn').addEventListener('click', addEntry);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); addEntry(); }
+        });
+        input.addEventListener('input', () => {
+          const q = normalizeProductText(input.value);
+          if (!q) { suggestBox.classList.remove('active'); suggestBox.innerHTML = ''; return; }
+          const matches = getKnownProducts().filter((p) => normalizeProductText(p.name).includes(q)).slice(0, 5);
+          if (matches.length === 0) { suggestBox.classList.remove('active'); suggestBox.innerHTML = ''; return; }
+          suggestBox.innerHTML = matches.map(() => `<div class="shopping-suggestion-item"><span class="name"></span><span class="price"></span></div>`).join('');
+          const rows = suggestBox.querySelectorAll('.shopping-suggestion-item');
+          rows.forEach((row, i) => {
+            row.querySelector('.name').textContent = matches[i].name;
+            row.querySelector('.price').textContent = fmtMoney(matches[i].price);
+            // pointerdown (before blur) rather than click, so the input's
+            // blur handler doesn't hide the suggestion box first.
+            row.addEventListener('pointerdown', (e) => e.preventDefault());
+            row.addEventListener('click', () => {
+              input.value = matches[i].name;
+              suggestBox.classList.remove('active');
+              input.focus();
+            });
+          });
+          suggestBox.classList.add('active');
+        });
+        input.addEventListener('blur', () => {
+          setTimeout(() => suggestBox.classList.remove('active'), 150);
+        });
+      }
+
+      container.appendChild(card);
+    }
+  }
+
+  document.getElementById('btn-shopping-list').addEventListener('click', () => {
+    renderShoppingList();
+    document.getElementById('shopping-list-overlay').classList.add('active');
+  });
+  document.getElementById('btn-shopping-list-close').addEventListener('click', () => {
+    document.getElementById('shopping-list-overlay').classList.remove('active');
+  });
 
   // ================== SCAN + OCR + REVIEW ==================
 
@@ -848,6 +993,28 @@
     closeReviewOverlay();
   });
 
+  // Auto-assigns items to whoever put a matching product on the shopping
+  // list, consuming that entry so it isn't matched twice. Ambiguous/no-match
+  // items are left alone for manual assignment in Zuordnen, as before.
+  function matchShoppingListEntries(items) {
+    let matchedCount = 0;
+    for (const item of items) {
+      if (item.assignedTo) continue;
+      const itemKey = normalizeProductText(item.name);
+      if (!itemKey) continue;
+      const matchIdx = shoppingList.findIndex((e) => {
+        const entryKey = normalizeProductText(e.text);
+        return entryKey && (itemKey.includes(entryKey) || entryKey.includes(itemKey));
+      });
+      if (matchIdx !== -1) {
+        item.assignedTo = shoppingList[matchIdx].employeeId;
+        shoppingList.splice(matchIdx, 1);
+        matchedCount++;
+      }
+    }
+    return matchedCount;
+  }
+
   document.getElementById('btn-review-save').addEventListener('click', () => {
     const expanded = [];
     for (const row of reviewRows) {
@@ -859,11 +1026,14 @@
     }
     if (expanded.length === 0) return;
 
+    const matchedCount = matchShoppingListEntries(expanded);
+    if (matchedCount > 0) saveShoppingList();
+
     receipts.push({ id: generateId(), createdAt: Date.now(), items: expanded, paid: false });
     saveReceipts();
     closeReviewOverlay();
     switchView('start');
-    toast('Beleg gespeichert');
+    toast(matchedCount > 0 ? `Beleg gespeichert · ${matchedCount} Artikel automatisch zugeordnet` : 'Beleg gespeichert');
   });
 
   document.getElementById('btn-review-retake').addEventListener('click', () => {

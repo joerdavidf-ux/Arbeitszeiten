@@ -29,8 +29,11 @@
       <button class="btn secondary" id="btn-paste-text" style="margin-bottom:10px;">
         📝 Text einfügen
       </button>
-      <button class="btn secondary" id="btn-manual-receipt" style="margin-bottom:20px;">
+      <button class="btn secondary" id="btn-manual-receipt" style="margin-bottom:10px;">
         ✏️ Ohne Foto manuell erfassen
+      </button>
+      <button class="btn secondary" id="btn-shopping-list" style="margin-bottom:20px;">
+        🛒 Einkaufsliste
       </button>
 
       <div class="section-title">Belege</div>
@@ -157,6 +160,21 @@
       <div id="review-rows"></div>
       <button class="btn secondary" id="btn-review-add-row">+ Position hinzufügen</button>
       <button class="btn secondary" id="btn-review-retake" hidden>🔁 Erneut fotografieren</button>
+    </div>
+  </div>
+
+  <!-- Shopping list overlay -->
+  <div id="shopping-list-overlay">
+    <div class="review-topbar">
+      <button id="btn-shopping-list-close">Fertig</button>
+      <div class="review-title">Einkaufsliste</div>
+      <span style="width:52px;"></span>
+    </div>
+    <div class="review-body">
+      <div class="row-desc" style="margin-bottom:16px;">Trag hier ein, was jede Person haben möchte. Wenn du später einen Beleg hinzufügst, ordnet die App passende Artikel automatisch der richtigen Person zu.</div>
+      <div id="shopping-list-people">
+        <div class="empty-hint">Noch keine Personen angelegt. Lege sie in den Einstellungen an.</div>
+      </div>
     </div>
   </div>
 
