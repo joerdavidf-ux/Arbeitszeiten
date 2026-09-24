@@ -241,6 +241,54 @@
 </div>
 <script src="app.js"></script>
 <script>
+// Export für den Umzug auf die neue Server-Version. Bewusst direkt in der Seite
+// (nicht in app.js), damit es auch funktioniert, solange noch ein alter app.js
+// aus dem Cache läuft.
+(function () {
+  function buildExportJson() {
+    function load(key) { try { return JSON.parse(localStorage.getItem(key)) || []; } catch (e) { return []; } }
+    return JSON.stringify({
+      app: 'belegsplit', version: 1, exportedAt: Date.now(),
+      employees: load('belegsplit_employees_v1'),
+      receipts: load('belegsplit_receipts_v1'),
+      shoppingList: load('belegsplit_shopping_v1')
+    });
+  }
+  var copyBtn = document.getElementById('btn-export-copy');
+  var fileBtn = document.getElementById('btn-export-file');
+  var OK_MSG = 'Daten kopiert. Jetzt in der neuen App auf "Aus Zwischenablage importieren" tippen.';
+  if (copyBtn) copyBtn.addEventListener('click', function () {
+    var json = buildExportJson();
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = json; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, json.length);
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      alert(ok ? OK_MSG : 'Kopieren nicht möglich. Bitte "Als Datei exportieren" nutzen.');
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(json).then(function () { alert(OK_MSG); }, fallback);
+    } else { fallback(); }
+  });
+  if (fileBtn) fileBtn.addEventListener('click', function () {
+    var name = 'belegsplit-' + new Date().toISOString().slice(0, 10) + '.json';
+    var file = new File([buildExportJson()], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: name }).catch(function () {});
+      return;
+    }
+    var url = URL.createObjectURL(file);
+    var link = document.createElement('a');
+    link.href = url; link.download = name;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  });
+})();
+</script>
+<script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(() => {});
